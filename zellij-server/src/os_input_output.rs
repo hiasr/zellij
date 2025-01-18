@@ -779,8 +779,12 @@ impl ServerOsApi for ServerOsInputOutput {
     fn get_all_cmds_by_ppid(&self) -> HashMap<String, Vec<String>> {
         // the key is the stringified ppid
         let mut cmds = HashMap::new();
+        let mut tty_to_cmd = HashMap::new();
+
+        // By sorting on tty and -ppid, we always see the "top-level" process
+        // of each tty first
         if let Some(output) = Command::new("ps")
-            .args(vec!["-ao", "ppid,args"])
+            .args(vec!["-ao", "ppid,tty,args", "--sort=tty,-ppid"])
             .output()
             .ok()
         {
@@ -794,8 +798,10 @@ impl ServerOsApi for ServerOsInputOutput {
                     .collect();
                 let mut line_parts = line_parts.into_iter();
                 let ppid = line_parts.next();
-                if let Some(ppid) = ppid {
-                    cmds.insert(ppid.into(), line_parts.collect());
+                let tty = line_parts.next();
+                if let (Some(ppid), Some(tty)) = (ppid, tty) {
+                    let cmd = tty_to_cmd.entry(tty).or_insert(line_parts.collect());
+                    cmds.insert(ppid.into(), cmd);
                 }
             }
         }
